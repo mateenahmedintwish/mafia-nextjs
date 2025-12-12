@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
 
             await pusherServer.trigger(`presence-${roomId}`, 'player-joined', newPlayer);
 
-            return NextResponse.json({ success: true, playerId, room });
+            return NextResponse.json({ success: true, playerId, roomId, room });
         }
 
         if (action === 'start') {
