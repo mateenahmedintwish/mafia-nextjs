@@ -24,7 +24,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
             const newPlayer = {
                 playerId,
                 name,
-                avatar,
+                avatar: avatar || 'default',
                 isConnected: true,
                 isAlive: true
             };

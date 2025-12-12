@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Ghost, Users, Play, ArrowRight, Gamepad2, Skull } from 'lucide-react';
+import { Ghost, Users, Play, ArrowRight, Gamepad2, Skull, User as UserIcon } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -11,9 +11,12 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const AVATARS = ['🕵️‍♂️', '👮‍♂️', '👨‍⚕️', '🧟', '🧛', '🧙', '🤖', '👽', '🤡', '👺', '👻', '💀'];
+
 export default function Home() {
   const router = useRouter();
   const [name, setName] = useState('');
+  const [avatar, setAvatar] = useState(AVATARS[0]);
   const [roomCode, setRoomCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +28,7 @@ export default function Home() {
       const res = await fetch('/api/game/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostName: name }),
+        body: JSON.stringify({ hostName: name, avatar }),
       });
       const data = await res.json();
       if (data.success) {
@@ -48,7 +51,7 @@ export default function Home() {
       const res = await fetch(`/api/game/${roomCode}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', name }),
+        body: JSON.stringify({ action: 'join', name, avatar }),
       });
       const data = await res.json();
       if (data.success) {
@@ -118,6 +121,27 @@ export default function Home() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                 />
+            </div>
+
+            {/* Avatar Selection */}
+            <div className="mb-6 space-y-2">
+                <label className="text-slate-300 text-sm font-bold ml-1 flex items-center gap-2">
+                    <UserIcon size={16} className="text-blue-400"/> CHOOSE DISGUISE
+                </label>
+                <div className="grid grid-cols-6 gap-2">
+                    {AVATARS.map((av) => (
+                        <button 
+                            key={av}
+                            onClick={() => setAvatar(av)}
+                            className={`
+                                text-2xl p-2 rounded-lg transition-all hover:scale-110 hover:bg-white/10
+                                ${avatar === av ? 'bg-white/20 scale-110 ring-2 ring-blue-500' : 'opacity-50 hover:opacity-100'}
+                            `}
+                        >
+                            {av}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {error && (
