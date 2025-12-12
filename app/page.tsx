@@ -7,100 +7,105 @@ export default function Home() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [roomCode, setRoomCode] = useState('');
-  const [isJoin, setIsJoin] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleCreate = async () => {
-    if (!name) return alert('Enter name');
+  const createGame = async () => {
+    if (!name) return setError('Please enter your name');
     setLoading(true);
     try {
       const res = await fetch('/api/game/create', {
         method: 'POST',
-        body: JSON.stringify({ playerName: name }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostName: name }),
       });
       const data = await res.json();
-      if (data.roomId) {
-        localStorage.setItem('mafia_playerId', data.playerId); // Simple persistence
-        localStorage.setItem('mafia_playerName', name);
-        router.push(`/lobby/${data.roomId}`);
+      if (data.success) {
+        // Save playerId to local storage or session
+        sessionStorage.setItem('mafia_playerId', data.playerId);
+        router.push(`/game/${data.roomId}`);
+      } else {
+        setError(data.error || 'Failed to create game');
       }
-    } catch (e) {
-      alert('Error creating game');
+    } catch (err) {
+      setError('An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJoin = async () => {
-    if (!name || !roomCode) return alert('Enter name and code');
+  const joinGame = async () => {
+    if (!name || !roomCode) return setError('Please enter name and room code');
     setLoading(true);
     try {
-      const res = await fetch('/api/game/join', {
-         method: 'POST',
-         body: JSON.stringify({ roomCode, playerName: name }),
+      const res = await fetch(`/api/game/${roomCode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'join', name }),
       });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      
-      localStorage.setItem('mafia_playerId', data.playerId);
-      localStorage.setItem('mafia_playerName', name);
-      router.push(`/lobby/${data.roomId}`);
-    } catch (e: any) {
-      alert(e.message || 'Error joining game');
+      if (data.success) {
+        sessionStorage.setItem('mafia_playerId', data.playerId);
+        router.push(`/game/${data.roomId}`);
+      } else {
+        setError(data.error || 'Failed to join game');
+      }
+    } catch (err) {
+      setError('An error occurred');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-950 text-white">
-      <h1 className="text-6xl font-bold mb-8 tracking-tighter text-red-600">MAFIA</h1>
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
+      <h1 className="text-4xl font-bold mb-8 text-red-600 tracking-wider">MAFIA</h1>
       
-      <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 w-full max-w-md space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Your Name</label>
-          <input 
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={name} 
-            onChange={e => setName(e.target.value)} 
+      <div className="w-full max-w-md bg-gray-800 p-8 rounded-lg shadow-xl border border-gray-700">
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2 text-gray-400">Your Name</label>
+          <input
+            type="text"
+            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-red-500 transition"
             placeholder="Enter your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
           />
         </div>
 
-        {!isJoin ? (
-            <button 
-                onClick={handleCreate} 
-                disabled={loading}
-                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded transition"
-            >
-                {loading ? 'Creating...' : 'Create New Game'}
-            </button>
-        ) : (
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium mb-1">Room Code</label>
-                    <input 
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white uppercase"
-                        value={roomCode} 
-                        onChange={e => setRoomCode(e.target.value)} 
-                        placeholder="Last 6 chars"
-                        maxLength={6}
-                    />
-                </div>
-                <button 
-                    onClick={handleJoin}
-                    disabled={loading}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition"
-                >
-                    {loading ? 'Joining...' : 'Join Game'}
-                </button>
-            </div>
-        )}
+        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
-        <div className="flex justify-center text-sm text-gray-400 mt-4">
-            <button onClick={() => setIsJoin(!isJoin)} className="hover:text-white underline">
-                {isJoin ? 'Or create a new room' : 'Or join an existing room'}
+        <div className="flex flex-col space-y-4">
+          <button
+            onClick={createGame}
+            disabled={loading}
+            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded transition duration-200 disabled:opacity-50"
+          >
+            {loading ? 'Processing...' : 'Create New Game'}
+          </button>
+
+          <div className="relative flex py-5 items-center">
+            <div className="flex-grow border-t border-gray-600"></div>
+            <span className="flex-shrink-0 mx-4 text-gray-500">OR</span>
+            <div className="flex-grow border-t border-gray-600"></div>
+          </div>
+
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              className="flex-1 p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 uppercase tracking-widest"
+              placeholder="ROOM CODE"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+            />
+            <button
+              onClick={joinGame}
+              disabled={loading}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition duration-200 disabled:opacity-50"
+            >
+              Join Game
             </button>
+          </div>
         </div>
       </div>
     </main>

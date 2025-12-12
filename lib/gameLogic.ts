@@ -1,46 +1,62 @@
-export type Role = 'MAFIA' | 'DOCTOR' | 'DETECTIVE' | 'CIVILIAN';
+import { IPlayer } from '@/models/Room';
 
-interface PlayerSetup {
-    id: string;
-    role?: Role | null; // Allow null initially, but logic assigns string
-}
+export function assignRoles(players: IPlayer[], settings: { minPlayers: number }): IPlayer[] {
+    const shuffled = [...players].sort(() => 0.5 - Math.random());
+    const totalPlayers = shuffled.length;
 
-export function assignRoles(players: PlayerSetup[]): PlayerSetup[] {
-    const count = players.length;
-    // Fisher-Yates shuffle
-    const shuffled = [...players];
-    for (let i = count - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    if (totalPlayers < settings.minPlayers) {
+        // Cannot start strictly, but we return as is or handle error elsewhere
+        // For robust logic, we assume caller checks counts
     }
 
-    // Config: 1 Mafia per 4 players (floor), Min 1 Doctor, Min 1 Detective
-    const mafiaCount = Math.max(1, Math.floor(count / 4));
-    const doctorCount = 1;
+    // Determine counts
+    const mafiaCount = Math.floor(totalPlayers / 4) || 1; // at least 1, or 1 per 4
     const detectiveCount = 1;
-    // Remainder are Civilians
+    const doctorCount = 1;
+    // Civilians = remainder
 
-    let idx = 0;
+    let currentIndex = 0;
 
     // Assign Mafia
     for (let i = 0; i < mafiaCount; i++) {
-        if (idx < count) shuffled[idx++].role = 'MAFIA';
-    }
-
-    // Assign Doctor
-    for (let i = 0; i < doctorCount; i++) {
-        if (idx < count) shuffled[idx++].role = 'DOCTOR';
+        if (currentIndex < totalPlayers) {
+            shuffled[currentIndex].role = 'Mafia';
+            currentIndex++;
+        }
     }
 
     // Assign Detective
-    for (let i = 0; i < detectiveCount; i++) {
-        if (idx < count) shuffled[idx++].role = 'DETECTIVE';
+    if (currentIndex < totalPlayers) {
+        shuffled[currentIndex].role = 'Detective';
+        currentIndex++;
     }
 
-    // Assign Civilians to the rest
-    while (idx < count) {
-        shuffled[idx++].role = 'CIVILIAN';
+    // Assign Doctor
+    if (currentIndex < totalPlayers) {
+        shuffled[currentIndex].role = 'Doctor';
+        currentIndex++;
     }
 
-    return shuffled;
+    // Assign Civilians
+    while (currentIndex < totalPlayers) {
+        shuffled[currentIndex].role = 'Civilian';
+        currentIndex++;
+    }
+
+    // Reset states
+    return shuffled.map(p => ({
+        ...p,
+        isAlive: true,
+        voteTarget: undefined,
+        actionTarget: undefined
+    }));
+}
+
+export function generateRoomCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
 }

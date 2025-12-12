@@ -34,39 +34,3 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Mafia Game Setup
-
-### 1. Environment Variables
-
-Create a `.env` file in the root directory with the following keys:
-
-```env
-# Vercel Postgres
-POSTGRES_PRISMA_URL="postgresql://..."
-POSTGRES_URL_NON_POOLING="postgresql://..."
-
-# Pusher (Get these from pusher.com)
-PUSHER_APP_ID="your_app_id"
-PUSHER_KEY="your_key"
-PUSHER_SECRET="your_secret"
-PUSHER_CLUSTER="your_cluster"
-
-NEXT_PUBLIC_PUSHER_KEY="your_key"
-NEXT_PUBLIC_PUSHER_CLUSTER="your_cluster"
-```
-
-### 2. Database Setup
-
-After configuring `.env`, push the schema to your database:
-
-```bash
-npx prisma db push
-```
-
-### 3. Run Development Server
-
-```bash
-npm run dev
-```
-

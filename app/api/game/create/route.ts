@@ -1,46 +1,52 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { randomBytes } from 'crypto';
+import dbConnect from '@/lib/db';
+import Room from '@/models/Room';
+import { generateRoomCode } from '@/lib/gameLogic';
 
 export async function POST(req: Request) {
     try {
-        const { playerName, avatar } = await req.json();
+        await dbConnect();
 
-        if (!playerName) {
-            return NextResponse.json({ error: 'Player name is required' }, { status: 400 });
+        // Generate unique room code
+        let roomId = generateRoomCode();
+        let existing = await Room.findOne({ roomId });
+        while (existing) {
+            roomId = generateRoomCode();
+            existing = await Room.findOne({ roomId });
         }
 
-        // Generate unique 6-char room code
-        const roomCode = randomBytes(3).toString('hex').toUpperCase();
+        const body = await req.json();
+        // Host defaults
+        const hostPlayer = {
+            playerId: crypto.randomUUID(),
+            name: body.hostName || 'Host',
+            avatar: body.avatar || 'default',
+            isConnected: true,
+            isAlive: true
+        };
 
-        // Create Room and Host Player in a transaction
-        const room = await prisma.room.create({
-            data: {
-                code: roomCode,
-                status: 'LOBBY',
-                players: {
-                    create: {
-                        name: playerName,
-                        avatar: avatar || 'default',
-                        isAlive: true,
-                    }
-                }
-            },
-            include: {
-                players: true
+        const newRoom = await Room.create({
+            roomId,
+            status: 'LOBBY',
+            players: [hostPlayer],
+            settings: {
+                minPlayers: 6,
+                maxPlayers: 15,
+                roleRevealOnElimination: true,
+                dayTimer: 60,
+                nightTimer: 30
             }
         });
 
-        const hostPlayer = room.players[0];
-
         return NextResponse.json({
-            roomCode: room.code,
-            roomId: room.id,
-            playerId: hostPlayer.id
+            success: true,
+            roomId,
+            playerId: hostPlayer.playerId,
+            room: newRoom
         });
 
     } catch (error) {
-        console.error('Error creating game:', error);
-        return NextResponse.json({ error: 'Failed to create game' }, { status: 500 });
+        console.error('Error creating room:', error);
+        return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }
