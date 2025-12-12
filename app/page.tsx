@@ -2,6 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Ghost, Users, Play, ArrowRight, Gamepad2, Skull } from 'lucide-react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export default function Home() {
   const router = useRouter();
@@ -21,7 +29,6 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.success) {
-        // Save playerId to local storage or session
         sessionStorage.setItem('mafia_playerId', data.playerId);
         router.push(`/game/${data.roomId}`);
       } else {
@@ -58,56 +65,124 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
-      <h1 className="text-4xl font-bold mb-8 text-red-600 tracking-wider">MAFIA</h1>
-      
-      <div className="w-full max-w-md bg-gray-800 p-8 rounded-lg shadow-xl border border-gray-700">
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2 text-gray-400">Your Name</label>
-          <input
-            type="text"
-            className="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-red-500 transition"
-            placeholder="Enter your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
+    <main className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Animated Elements */}
+      <motion.div 
+        animate={{ 
+            y: [0, -20, 0],
+            rotate: [0, 5, -5, 0]
+        }}
+        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute top-10 left-10 text-slate-800 opacity-20 pointer-events-none"
+      >
+        <Ghost size={200} />
+      </motion.div>
+      <motion.div 
+         animate={{ 
+            y: [0, 20, 0], 
+            rotate: [0, -10, 10, 0] 
+        }}
+        transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute bottom-10 right-10 text-slate-800 opacity-20 pointer-events-none"
+      >
+        <Skull size={200} />
+      </motion.div>
 
-        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-
-        <div className="flex flex-col space-y-4">
-          <button
-            onClick={createGame}
-            disabled={loading}
-            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded transition duration-200 disabled:opacity-50"
-          >
-            {loading ? 'Processing...' : 'Create New Game'}
-          </button>
-
-          <div className="relative flex py-5 items-center">
-            <div className="flex-grow border-t border-gray-600"></div>
-            <span className="flex-shrink-0 mx-4 text-gray-500">OR</span>
-            <div className="flex-grow border-t border-gray-600"></div>
-          </div>
-
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              className="flex-1 p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:border-blue-500 uppercase tracking-widest"
-              placeholder="ROOM CODE"
-              value={roomCode}
-              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-            />
-            <button
-              onClick={joinGame}
-              disabled={loading}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition duration-200 disabled:opacity-50"
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md z-10"
+      >
+        <div className="text-center mb-8">
+            <motion.h1 
+                className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-600 tracking-tighter drop-shadow-lg"
+                initial={{ y: -50 }}
+                animate={{ y: 0 }}
             >
-              Join Game
-            </button>
-          </div>
+                MAFIA
+            </motion.h1>
+            <p className="text-slate-400 mt-2 font-mono">Trust No One. Suspect Everyone.</p>
         </div>
-      </div>
+
+        <div className="bg-slate-800/80 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-700/50">
+           
+           {/* Name Input */}
+            <div className="mb-6 space-y-2">
+                <label className="text-slate-300 text-sm font-bold ml-1 flex items-center gap-2">
+                    <Ghost size={16} className="text-red-400"/> WHO ARE YOU?
+                </label>
+                <input
+                    type="text"
+                    className="w-full p-4 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all font-bold text-lg"
+                    placeholder="Enter Agent Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                />
+            </div>
+
+            {error && (
+                <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="bg-red-500/10 border border-red-500/50 text-red-200 p-3 rounded-lg text-sm mb-4 flex items-center gap-2"
+                >
+                    <Skull size={16} />
+                    {error}
+                </motion.div>
+            )}
+
+            <div className="space-y-4">
+                {/* Create Game Button */}
+                <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={createGame}
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 flex items-center justify-center gap-3 transition-all"
+                >
+                   {loading ? <Users className="animate-pulse" /> : <Play size={20} fill="currentColor" />}
+                   CREATE NEW GAME
+                </motion.button>
+
+                <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-700"></div>
+                    <span className="flex-shrink-0 mx-4 text-slate-600 text-xs font-bold uppercase">OR JOIN SQUAD</span>
+                    <div className="flex-grow border-t border-slate-700"></div>
+                </div>
+
+                {/* Join Game Section */}
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Gamepad2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={20}/>
+                        <input
+                            type="text"
+                            className="w-full p-4 pl-10 rounded-xl bg-slate-900/50 border border-slate-700 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono uppercase tracking-widest text-lg"
+                            placeholder="CODE"
+                            value={roomCode}
+                            onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                        />
+                    </div>
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={joinGame}
+                        disabled={loading}
+                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl shadow-lg shadow-blue-900/20"
+                    >
+                        <ArrowRight size={24} />
+                    </motion.button>
+                </div>
+            </div>
+        </div>
+        
+        {/* Footer */}
+        <div className="mt-8 text-center">
+             <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/50 rounded-full text-xs text-slate-500 font-mono">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                SERVER STATUS: ONLINE
+             </div>
+        </div>
+      </motion.div>
     </main>
   );
 }

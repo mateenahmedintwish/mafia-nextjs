@@ -4,6 +4,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { pusherClient } from '@/lib/pusher';
 import { IPlayer, IRoom } from '@/models/Room';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+    Moon, Sun, Shield, Search, Skull, User, Users,
+    Crown, Clock, Copy, Ghost, MessageSquare, 
+    Menu, X
+} from 'lucide-react';
 
 export default function GameRoom() {
   const params = useParams();
@@ -12,12 +18,10 @@ export default function GameRoom() {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [room, setRoom] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ timeLeft, setTimeLeft ] = useState<number>(0);
-  const [ statusMessage, setStatusMessage ] = useState('');
-  
-  // Local state for actions
+  const [timeLeft, setTimeLeft] = useState<number>(0);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [hasActed, setHasActed] = useState(false);
+  const [showRoleInfo, setShowRoleInfo] = useState(false); // Mobile toggle
 
   useEffect(() => {
     const pid = sessionStorage.getItem('mafia_playerId');
@@ -27,7 +31,6 @@ export default function GameRoom() {
     }
     setPlayerId(pid);
 
-    // Initial Fetch
     fetch(`/api/game/${roomId}?playerId=${pid}`)
       .then(res => res.json())
       .then(data => {
@@ -42,7 +45,6 @@ export default function GameRoom() {
       .catch(() => router.push('/'));
   }, [roomId, router]);
 
-  // Timer Logic
   useEffect(() => {
     if (!room?.gameState?.phaseEndTime) return;
     const interval = setInterval(() => {
@@ -62,55 +64,34 @@ export default function GameRoom() {
       
       if (diff <= 0) {
           setTimeLeft(0);
-          // If master/host or random client, trigger phase change?
-          // Ideally rely on server, but server needs trigger.
-          // Let's have the current player trigger if they are host or valid.
-          // For simplicity, anyone with < 0 can try trigger.
           if (currentRoom.status === 'ACTIVE' && diff < -2 && !hasActed) { 
               // triggerProcessPhase(); 
-              // Prevent spam: maybe only if I am the first player in list?
           }
       } else {
           setTimeLeft(diff);
       }
   };
 
-  // Pusher Subscription
   useEffect(() => {
     if (!playerId || !roomId) return;
-
-    // Configure Auth params dynamically
-    (pusherClient as any).config.auth = {
-        params: { playerId }
-    };
-    
-    // Subscribe to presence channel
+    (pusherClient as any).config.auth = { params: { playerId } };
     const channel = pusherClient.subscribe(`presence-${roomId}`);
-
-    channel.bind('pusher:subscription_succeeded', () => {
-      console.log('Connected to game channel');
-    });
 
     channel.bind('player-joined', (player: IPlayer) => {
       setRoom((prev: any) => {
           if (!prev) return null;
-          // Avoid duplicates
           if (prev.players.find((p: any) => p.playerId === player.playerId)) return prev;
           return { ...prev, players: [...prev.players, player] };
       });
     });
 
-    channel.bind('game-started', (data: { gameState: any }) => {
-        // Refetch to get roles securely
+    channel.bind('game-started', () => {
         fetch(`/api/game/${roomId}?playerId=${playerId}`)
             .then(res => res.json())
-            .then(d => {
-                if (d.success) setRoom(d.room);
-            });
+            .then(d => { if (d.success) setRoom(d.room); });
     });
 
-    channel.bind('phase-change', (data: { gameState: any, players: IPlayer[] }) => {
-        // We can update state directly or refetch. Refetch is safer for info hiding.
+    channel.bind('phase-change', () => {
         fetch(`/api/game/${roomId}?playerId=${playerId}`)
             .then(res => res.json())
             .then(d => {
@@ -122,16 +103,9 @@ export default function GameRoom() {
             });
     });
 
-    channel.bind('vote-update', (data: { votes: any }) => {
-        // Optional: show live votes
-    });
-
-    return () => {
-      pusherClient.unsubscribe(`presence-${roomId}`);
-    };
+    return () => { pusherClient.unsubscribe(`presence-${roomId}`); };
   }, [playerId, roomId]);
 
-  // Actions
   const startGame = async () => {
       await fetch(`/api/game/${roomId}`, {
           method: 'POST',
@@ -161,169 +135,290 @@ export default function GameRoom() {
     setHasActed(true);
   };
 
-  // Helper Getters
   const myPlayer = room?.players.find((p: any) => p.playerId === playerId);
   const isHost = room?.players[0]?.playerId === playerId;
   const isDead = myPlayer?.isAlive === false;
+  const isNight = room?.gameState.phase === 'NIGHT';
 
-  if (loading) return <div className="text-white text-center mt-20">Loading Dungeon...</div>;
-  if (!room) return <div className="text-white text-center mt-20">Room not found</div>;
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-mono animate-pulse">LOADING PROTOCOLS...</div>;
+  if (!room) return <div className="min-h-screen bg-black flex items-center justify-center text-red-500 font-bold">ROOM NOT FOUND</div>;
 
   return (
-    <div className={`min-h-screen p-4 text-white ${room.gameState.phase === 'NIGHT' ? 'bg-slate-900' : 'bg-gray-800'}`}>
+    <div className={`min-h-screen transition-colors duration-1000 ${isNight ? 'bg-slate-950' : 'bg-sky-900'} text-white pb-24 font-sans`}>
+        
+        {/* Dynamic Background Elements */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+            <AnimatePresence mode="wait">
+                {isNight ? (
+                    <motion.div 
+                        key="moon"
+                        initial={{ opacity: 0, y: 50 }} 
+                        animate={{ opacity: 0.1, y: 0 }}
+                        exit={{ opacity: 0, y: -50 }}
+                        transition={{ duration: 2 }}
+                        className="absolute top-10 right-10"
+                    >
+                        <Moon size={300} />
+                    </motion.div>
+                ) : (
+                    <motion.div 
+                        key="sun"
+                        initial={{ opacity: 0, scale: 0.8 }} 
+                        animate={{ opacity: 0.1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.2 }}
+                        transition={{ duration: 2 }}
+                        className="absolute -top-20 -left-20 text-yellow-500"
+                    >
+                        <Sun size={400} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+
         {/* Header */}
-        <header className="flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
-            <div>
-                <h1 className="text-2xl font-bold text-red-500">MAFIA <span className="text-white text-sm opacity-50 ml-2">Room: {roomId}</span></h1>
-                <div className="text-sm text-gray-400 mt-1">Status: {room.status} | Phase: {room.gameState.phase}</div>
+        <header className="sticky top-0 z-50 backdrop-blur-md bg-black/20 border-b border-white/10 p-4 flex justify-between items-center shadow-lg">
+            <div className="flex items-center gap-3">
+                <div className="bg-white/10 p-2 rounded-lg cursor-pointer hover:bg-white/20 transition active:scale-95" onClick={() => navigator.clipboard.writeText(roomId)}>
+                    <span className="font-mono font-bold tracking-widest text-sm flex items-center gap-2">
+                        {roomId} <Copy size={12} className="opacity-50"/>
+                    </span>
+                </div>
+                <div className="text-xs uppercase font-bold tracking-wider opacity-70 hidden sm:block">
+                    {room.status}
+                </div>
             </div>
-            <div className="text-right">
-                <div className="text-xl font-mono">{timeLeft > 0 ? `${timeLeft}s` : '0s'}</div>
-                {myPlayer && <div className="text-sm text-green-400">{myPlayer.name} ({myPlayer.role || '???'})</div>}
+            
+            <div className="flex items-center gap-4">
+                <div className={`flex items-center gap-2 font-mono font-bold text-xl ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                    <Clock size={20} />
+                    {timeLeft}s
+                </div>
+                <button onClick={() => setShowRoleInfo(!showRoleInfo)} className="sm:hidden p-2 bg-white/10 rounded-full">
+                    {showRoleInfo ? <X size={20} /> : <Menu size={20} />}
+                </button>
             </div>
         </header>
 
-        {/* Night Results */}
-        {room.gameState.nightResults?.message && (
-             <div className="bg-yellow-900/50 border border-yellow-700 p-4 mb-6 rounded text-yellow-200 text-center animate-pulse">
-                 {room.gameState.nightResults.message}
-             </div>
-        )}
+        {/* Floating Night Result Notification */}
+        <AnimatePresence>
+            {room.gameState.nightResults?.message && (
+                <motion.div 
+                    initial={{ y: -50, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -50, opacity: 0 }}
+                    className="fixed top-20 left-0 right-0 z-40 px-4 flex justify-center pointer-events-none"
+                >
+                    <div className="bg-yellow-500/90 text-black font-bold px-6 py-3 rounded-full shadow-xl flex items-center gap-2 backdrop-blur-md">
+                        <MessageSquare size={16} />
+                        {room.gameState.nightResults.message}
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
 
-        {/* LOBBY VIEW */}
-        {room.status === 'LOBBY' && (
-            <div className="max-w-2xl mx-auto">
-                <div className="bg-gray-700 rounded-lg p-6 mb-6">
-                    <h2 className="text-xl font-bold mb-4">Players ({room.players.length}/{room.settings.maxPlayers})</h2>
-                    <ul className="grid grid-cols-2 gap-4">
-                        {room.players.map((p: any) => (
-                            <li key={p.playerId} className="flex items-center space-x-2 bg-gray-600 p-3 rounded">
-                                <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-xs">
-                                    {p.avatar === 'default' ? '👤' : p.avatar}
-                                </div>
-                                <span>{p.name} {p.playerId === playerId && '(You)'}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-                {isHost && (
-                    <button onClick={startGame} className="w-full bg-green-600 hover:bg-green-700 py-4 rounded font-bold text-lg shadow-lg">
-                        START GAME
-                    </button>
-                )}
-            </div>
-        )}
-
-        {/* GAME OVER VIEW */}
-        {room.gameState.phase === 'GAME_OVER' && (
-             <div className="text-center mt-20">
-                 <h1 className="text-6xl font-bold text-yellow-500 mb-8">{room.gameState.nightResults?.message || 'GAME OVER'}</h1>
-                 <button onClick={() => router.push('/')} className="bg-blue-600 px-8 py-3 rounded">Back to Home</button>
-             </div>
-        )}
-
-        {/* ACTIVE GAME VIEW */}
-        {room.status === 'ACTIVE' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Main Action Area */}
-                <div className="md:col-span-2 space-y-6">
-                    
-                    {/* Phase Info */}
-                    <div className="bg-gray-700 p-6 rounded-lg text-center">
-                        {room.gameState.phase === 'NIGHT' ? (
-                            <div>
-                                <h2 className="text-3xl font-serif text-blue-300 mb-2">Night Phase</h2>
-                                {isDead ? <p>You are dead. Watch in silence.</p> :
-                                 myPlayer?.role === 'Mafia' ? <p className="text-red-400">Kill a civilian.</p> :
-                                 myPlayer?.role === 'Doctor' ? <p className="text-green-400">Choose someone to save.</p> :
-                                 myPlayer?.role === 'Detective' ? <p className="text-blue-400">Investigate a suspect.</p> :
-                                 <p className="text-gray-400">Sleep safely... hopefully.</p>
-                                }
-                            </div>
+        <main className="container mx-auto p-4 z-10 relative">
+            
+            {/* LOBBY VIEW */}
+            {room.status === 'LOBBY' && (
+                <div className="max-w-md mx-auto mt-10">
+                    <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-2xl">
+                        <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
+                            <Users className="text-blue-400" /> 
+                            SQUAD ({room.players.length}/{room.settings.maxPlayers})
+                        </h2>
+                        <ul className="space-y-3 mb-8">
+                            <AnimatePresence>
+                                {room.players.map((p: any) => (
+                                    <motion.li 
+                                        key={p.playerId}
+                                        initial={{ x: -20, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: 20, opacity: 0 }}
+                                        className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-lg shadow-inner font-bold">
+                                                {p.avatar === 'default' ? p.name.charAt(0).toUpperCase() : p.avatar}
+                                            </div>
+                                            <span className="font-bold">{p.name} {p.playerId === playerId && <span className="text-xs bg-blue-500/50 px-2 py-0.5 rounded ml-2">YOU</span>}</span>
+                                        </div>
+                                        {room.players[0].playerId === p.playerId && <Crown size={16} className="text-yellow-400" />}
+                                    </motion.li>
+                                ))}
+                            </AnimatePresence>
+                        </ul>
+                        {isHost ? (
+                            <motion.button 
+                                whileTap={{ scale: 0.95 }}
+                                onClick={startGame} 
+                                className="w-full bg-green-500 hover:bg-green-600 text-black font-black py-4 rounded-xl shadow-lg transition-all"
+                            >
+                                START MISSION
+                            </motion.button>
                         ) : (
-                            <div>
-                                <h2 className="text-3xl font-serif text-yellow-500 mb-2">Day Phase</h2>
-                                {isDead ? <p>You are dead.</p> : <p>Discuss and Vote to eliminate the Mafia.</p>}
+                            <div className="text-center text-sm opacity-50 font-mono animate-pulse">WAITING FOR HOST...</div>
+                        )}
+                    </motion.div>
+                </div>
+            )}
+
+            {/* ACTIVE GAME VIEW */}
+            {room.status === 'ACTIVE' && (
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    
+                    {/* Action Center - Top on Mobile */}
+                    <motion.div layout className="lg:col-span-3 space-y-6">
+                        
+                        {/* Phase Header */}
+                        <div className="text-center mb-8">
+                            <motion.div 
+                                key={room.gameState.phase}
+                                initial={{ scale: 0.5, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="inline-block p-4 rounded-full bg-white/5 backdrop-blur-lg mb-4 border border-white/10"
+                            >
+                                {isNight ? <Moon size={48} className="text-blue-300" /> : <Sun size={48} className="text-yellow-400" />}
+                            </motion.div>
+                            <h2 className="text-4xl font-black tracking-tighter mb-2">
+                                {isNight ? 'NIGHT FALLS' : 'DAY BREAKS'}
+                            </h2>
+                            <p className="text-lg opacity-80 max-w-md mx-auto font-medium">
+                                {isDead ? "You have been eliminated. You drift through the void." :
+                                 isNight ? "Silence falls. Key roles execute their missions in the shadows." :
+                                 "The town awakens. Discuss, accuse, and vote to eliminate the impostor."}
+                            </p>
+                        </div>
+
+                        {/* Player Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {room.players.map((p: any) => {
+                                const isMe = p.playerId === playerId;
+                                const isSelectable = !isDead && p.isAlive && !isMe && (
+                                    (room.gameState.phase === 'DAY') ||
+                                    (room.gameState.phase === 'NIGHT' && ['Mafia', 'Doctor', 'Detective'].includes(myPlayer?.role || ''))
+                                );
+                                const isSelected = selectedTarget === p.playerId;
+
+                                return (
+                                    <motion.button
+                                        key={p.playerId}
+                                        disabled={!isSelectable || hasActed}
+                                        onClick={() => sendAction(p.playerId)}
+                                        whileHover={isSelectable && !hasActed ? { scale: 1.05, y: -5 } : {}}
+                                        whileTap={isSelectable && !hasActed ? { scale: 0.95 } : {}}
+                                        className={`
+                                            relative p-4 rounded-2xl flex flex-col items-center justify-center gap-3 aspect-[4/5] transition-all
+                                            ${!p.isAlive 
+                                                ? 'bg-red-900/10 border-red-900/30 grayscale opacity-70' 
+                                                : 'bg-white/10 border-white/10 hover:bg-white/20 hover:border-white/30 backdrop-blur-md shadow-lg'}
+                                            ${isSelected ? 'ring-4 ring-yellow-400 border-yellow-400 bg-yellow-400/10' : 'border'}
+                                            ${!isSelectable && 'cursor-default'}
+                                        `}
+                                    >
+                                        <div className={`
+                                            w-16 h-16 rounded-2xl flex items-center justify-center text-2xl shadow-inner
+                                            ${!p.isAlive ? 'bg-red-900/20 text-red-500' : 'bg-gradient-to-br from-white/20 to-white/5'}
+                                        `}>
+                                            {p.isAlive ? (p.avatar === 'default' ? p.name.charAt(0) : p.avatar) : <Skull />}
+                                        </div>
+                                        
+                                        <div className="text-center">
+                                            <div className="font-black text-sm truncate max-w-[100px]">{p.name}</div>
+                                            {isMe && <div className="text-[10px] uppercase font-bold text-blue-300 mt-1">YOU</div>}
+                                        </div>
+
+                                        {/* Status Indicators */}
+                                        {!p.isAlive && <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-2xl backdrop-blur-[1px]"><Skull className="text-red-500 animate-pulse" size={32} /></div>}
+                                        
+                                        {/* Role Reveals */}
+                                        {myPlayer?.role === 'Mafia' && p.role === 'Mafia' && !isMe && (
+                                            <div className="absolute top-2 right-2 text-red-400"><User size={16} /></div>
+                                        )}
+                                    </motion.button>
+                                );
+                            })}
+                        </div>
+                        
+                        {/* Host Debug */}
+                        {isHost && timeLeft <= 0 && (
+                            <div className="flex justify-center mt-8">
+                                <button onClick={forcePhase} className="bg-red-500/20 text-red-300 px-4 py-2 rounded-full text-xs font-mono hover:bg-red-500/40 transition">
+                                    [ADMIN] FORCE PHASE END
+                                </button>
                             </div>
                         )}
-                        
-                        {/* Timer Force Button (Debug/Emergency) */}
-                         {timeLeft <= 0 && isHost && (
-                             <button onClick={forcePhase} className="mt-4 text-xs bg-gray-600 px-2 py-1 rounded">Process Phase</button>
-                         )}
-                    </div>
+                    </motion.div>
 
-                    {/* Players Grid / Action Targets */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                        {room.players.map((p: any) => {
-                            // Filter valid targets?
-                            // Logic: Can only select alive players.
-                            // If Night:
-                            //   Mafia -> Select anyone (except self? usually yes).
-                            //   Doctor -> Select anyone.
-                            //   Detective -> Select anyone.
-                            //   Civilian -> No selection.
-                            // If Day:
-                            //   Any Alive -> Select Any Alive (except self usually allowed but self-vote is rare).
-                            
-                            const isSelectable = !isDead && p.isAlive && (
-                                (room.gameState.phase === 'DAY') ||
-                                (room.gameState.phase === 'NIGHT' && ['Mafia', 'Doctor', 'Detective'].includes(myPlayer?.role || ''))
-                            );
+                    {/* Role Sidebar (Desktop) / Drawer (Mobile) */}
+                    <AnimatePresence>
+                        {(showRoleInfo || window.innerWidth > 1024) && (
+                            <motion.div 
+                                initial={{ x: 100, opacity: 0 }}
+                                animate={{ x: 0, opacity: 1 }}
+                                exit={{ x: 100, opacity: 0 }}
+                                className={`
+                                    lg:block bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 h-fit
+                                    ${showRoleInfo ? 'fixed inset-0 z-50 m-4 lg:static lg:m-0 bg-slate-900/90 lg:bg-white/5' : 'hidden'}
+                                `}
+                            >
+                                <div className="flex justify-between items-center mb-6 lg:hidden">
+                                     <h3 className="font-bold text-xl">MISSION INTEL</h3>
+                                     <button onClick={() => setShowRoleInfo(false)}><X /></button>
+                                </div>
 
-                            const isSelected = selectedTarget === p.playerId;
+                                <div className="mb-8">
+                                    <h3 className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">You Are</h3>
+                                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 rounded-2xl shadow-lg relative overflow-hidden group hover:scale-105 transition-transform">
+                                        <div className="absolute -right-4 -bottom-4 opacity-20 rotate-12 group-hover:rotate-0 transition-transform duration-500">
+                                            {myPlayer?.role === 'Mafia' ? <Skull size={100} /> : 
+                                             myPlayer?.role === 'Doctor' ? <Shield size={100} /> :
+                                             myPlayer?.role === 'Detective' ? <Search size={100} /> :
+                                             <User size={100} />}
+                                        </div>
+                                        <div className="relative z-10">
+                                            <div className="text-3xl font-black mb-1">{myPlayer?.role}</div>
+                                            <div className="text-xs font-medium text-blue-100 opacity-80 leading-relaxed">
+                                                {myPlayer?.role === 'Mafia' && "Eliminate all civilians without getting caught."}
+                                                {myPlayer?.role === 'Civilian' && "Find the impostors and vote them out."}
+                                                {myPlayer?.role === 'Doctor' && "Protect one innocent soul each night."}
+                                                {myPlayer?.role === 'Detective' && "Investigate suspects to reveal their true nature."}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
 
-                            return (
-                                <button 
-                                    key={p.playerId}
-                                    disabled={!isSelectable || hasActed}
-                                    onClick={() => sendAction(p.playerId)}
-                                    className={`
-                                        relative p-4 rounded-lg flex flex-col items-center justify-center space-y-2 border-2 transition
-                                        ${!p.isAlive ? 'opacity-50 grayscale bg-gray-800 border-gray-700' : 'bg-gray-700 border-gray-600'}
-                                        ${isSelected ? 'border-yellow-500 ring-2 ring-yellow-500/50' : ''}
-                                        ${isSelectable && !hasActed ? 'hover:bg-gray-600 hover:border-gray-500 cursor-pointer' : 'cursor-default'}
-                                    `}
-                                >
-                                    <div className="text-3xl">{p.avatar === 'default' ? '👤' : p.avatar}</div>
-                                    <div className="font-bold">{p.name}</div>
-                                    {!p.isAlive && <div className="text-xs text-red-500 uppercase font-black">DEAD</div>}
-                                    
-                                    {/* Role Reveal if applicable */}
-                                    {/* e.g. Mafia sees other Mafia */}
-                                    {myPlayer?.role === 'Mafia' && p.role === 'Mafia' && p.playerId !== myPlayer.playerId && (
-                                        <div className="text-xs text-red-400 absolute top-2 right-2">MAFIA</div>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
+                                <div>
+                                    <h3 className="text-xs font-bold text-white/50 uppercase tracking-widest mb-4">Comms Channel</h3>
+                                    <div className="bg-black/30 rounded-xl h-64 flex items-center justify-center text-center p-4 border border-white/5">
+                                        <div className="opacity-50 text-sm">
+                                            <MessageSquare className="mx-auto mb-2 opacity-50" />
+                                            Encrypting transmission...<br/>
+                                            <span className="text-xs text-white/30">(Chat not available in this demo)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
+            )}
+            
+            {/* GAME OVER VIEW */}
+            {room.status === 'FINISHED' && (
+                 <div className="flex flex-col items-center justify-center min-h-[50vh]">
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center">
+                        <Crown size={80} className="text-yellow-400 mx-auto mb-6" />
+                        <h1 className="text-5xl lg:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-8 drop-shadow-lg">
+                            {room.gameState.nightResults?.message || 'GAME OVER'}
+                        </h1>
+                        <button onClick={() => router.push('/')} className="px-8 py-4 bg-white text-black font-bold rounded-full hover:scale-105 transition">
+                            RETURN TO BASE
+                        </button>
+                    </motion.div>
+                 </div>
+            )}
 
-                {/* Sidebar (Role Info & Simple Chat Placeholder) */}
-                <div className="md:col-span-1 space-y-6">
-                    <div className="bg-gray-700 p-4 rounded-lg">
-                        <h3 className="font-bold text-gray-400 uppercase text-xs mb-2">Your Role</h3>
-                        <div className="text-2xl font-bold mb-2">{myPlayer?.role}</div>
-                        <p className="text-sm text-gray-300 leading-relaxed">
-                            {myPlayer?.role === 'Mafia' && "Your goal is to eliminate all civilians. Work with other Mafia members at night."}
-                            {myPlayer?.role === 'Civilian' && "Your goal is to find and eliminate the Mafia during the day."}
-                            {myPlayer?.role === 'Doctor' && "Wake up at night to protect one player from being killed."}
-                            {myPlayer?.role === 'Detective' && "Wake up at night to investigate one player's role."}
-                        </p>
-                    </div>
-
-                     {/* Chat Placeholder - Actual chat would require more DB fields or ephemeral pusher events */}
-                    <div className="bg-gray-700 p-4 rounded-lg h-64 flex flex-col">
-                        <h3 className="font-bold text-gray-400 uppercase text-xs mb-2">Game Chat</h3>
-                        <div className="flex-1 bg-gray-800 rounded p-2 mb-2 text-sm text-gray-500 flex items-center justify-center">
-                            Chat requires Pusher Presence Channel events.
-                            (Not fully implemented in this MVP)
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
+        </main>
     </div>
   );
 }
