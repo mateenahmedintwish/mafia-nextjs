@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Moon, Sun, Shield, Search, Skull, User, Users,
     Crown, Clock, Copy, Ghost, MessageSquare, 
-    Menu, X
+    Menu, X, Settings as SettingsIcon, Trash2, CheckCircle, SkipForward
 } from 'lucide-react';
 
 export default function GameRoom() {
@@ -103,6 +103,26 @@ export default function GameRoom() {
             });
     });
 
+    channel.bind('settings-update', (newSettings: any) => {
+        setRoom((prev: any) => prev ? ({ ...prev, settings: newSettings }) : prev);
+    });
+
+    channel.bind('player-kicked', ({ playerId: kickedId }: { playerId: string }) => {
+        if (kickedId === playerId) {
+            alert('You have been kicked from the room.');
+            router.push('/');
+        } else {
+             setRoom((prev: any) => {
+                if (!prev) return null;
+                return { ...prev, players: prev.players.filter((p: any) => p.playerId !== kickedId) };
+            });
+        }
+    });
+
+    channel.bind('player-update', (updatedPlayers: any) => {
+         setRoom((prev: any) => prev ? ({ ...prev, players: updatedPlayers }) : prev);
+    });
+
     return () => { pusherClient.unsubscribe(`presence-${roomId}`); };
   }, [playerId, roomId]);
 
@@ -133,6 +153,31 @@ export default function GameRoom() {
     });
     setSelectedTarget(targetId);
     setHasActed(true);
+  };
+
+  const kickPlayer = async (targetId: string) => {
+      if (!confirm('Kick this player?')) return;
+      await fetch(`/api/game/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'kick-player', playerId, targetId })
+      });
+  };
+
+  const updateSettings = async (newSettings: any) => {
+      await fetch(`/api/game/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update-settings', playerId, settings: newSettings })
+      });
+  };
+
+  const toggleReady = async () => {
+      await fetch(`/api/game/${roomId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggle-ready', playerId })
+      });
   };
 
   const myPlayer = room?.players.find((p: any) => p.playerId === playerId);
@@ -220,7 +265,7 @@ export default function GameRoom() {
             
             {/* LOBBY VIEW */}
             {room.status === 'LOBBY' && (
-                <div className="max-w-md mx-auto mt-10">
+                <div className="max-w-md mx-auto mt-10 space-y-6">
                     <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-2xl">
                         <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
                             <Users className="text-blue-400" /> 
@@ -234,7 +279,7 @@ export default function GameRoom() {
                                         initial={{ x: -20, opacity: 0 }}
                                         animate={{ x: 0, opacity: 1 }}
                                         exit={{ x: 20, opacity: 0 }}
-                                        className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5"
+                                        className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 group"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-lg shadow-inner font-bold">
@@ -242,7 +287,14 @@ export default function GameRoom() {
                                             </div>
                                             <span className="font-bold">{p.name} {p.playerId === playerId && <span className="text-xs bg-blue-500/50 px-2 py-0.5 rounded ml-2">YOU</span>}</span>
                                         </div>
-                                        {room.players[0].playerId === p.playerId && <Crown size={16} className="text-yellow-400" />}
+                                        <div className="flex gap-2">
+                                            {room.players[0].playerId === p.playerId && <Crown size={16} className="text-yellow-400" />}
+                                            {isHost && p.playerId !== playerId && (
+                                                <button onClick={() => kickPlayer(p.playerId)} className="text-red-500 hover:bg-red-500/20 p-1 rounded transition opacity-0 group-hover:opacity-100">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </motion.li>
                                 ))}
                             </AnimatePresence>
@@ -259,6 +311,34 @@ export default function GameRoom() {
                             <div className="text-center text-sm opacity-50 font-mono animate-pulse">WAITING FOR HOST...</div>
                         )}
                     </motion.div>
+
+                    {/* Host Settings Panel */}
+                    {isHost && (
+                         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 border border-white/10 shadow-xl">
+                            <h3 className="font-bold mb-4 flex items-center gap-2"><SettingsIcon size={18} /> MISSION PARAMETERS</h3>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 block mb-1">DAY DURATION ({room.settings.dayTimer}s)</label>
+                                    <input 
+                                        type="range" min="30" max="300" step="10" 
+                                        value={room.settings.dayTimer}
+                                        onChange={(e) => updateSettings({ dayTimer: parseInt(e.target.value) })}
+                                        className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-400 block mb-1">NIGHT DURATION ({room.settings.nightTimer}s)</label>
+                                    <input 
+                                        type="range" min="15" max="120" step="5" 
+                                        value={room.settings.nightTimer}
+                                        onChange={(e) => updateSettings({ nightTimer: parseInt(e.target.value) })}
+                                        className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                    />
+                                </div>
+                            </div>
+                         </motion.div>
+                    )}
                 </div>
             )}
 
@@ -339,14 +419,35 @@ export default function GameRoom() {
                             })}
                         </div>
                         
-                        {/* Host Debug */}
-                        {isHost && timeLeft <= 0 && (
-                            <div className="flex justify-center mt-8">
+                        {/* Host Debug & Ready Button */}
+                        <div className="flex justify-center mt-8 gap-4">
+                            {myPlayer?.isAlive && (
+                                <button 
+                                    onClick={toggleReady} 
+                                    className={`
+                                        flex items-center gap-2 px-6 py-3 rounded-full font-bold transition-all
+                                        ${myPlayer.isReady ? 'bg-green-500 text-black' : 'bg-white/10 hover:bg-white/20'}
+                                    `}
+                                >
+                                    {myPlayer.isReady ? (
+                                        <> <CheckCircle size={20} /> READY </>
+                                    ) : (
+                                        <> <SkipForward size={20} /> VOTE TO SKIP </>
+                                    )}
+                                </button>
+                            )}
+
+                            {isHost && timeLeft <= 0 && (
                                 <button onClick={forcePhase} className="bg-red-500/20 text-red-300 px-4 py-2 rounded-full text-xs font-mono hover:bg-red-500/40 transition">
                                     [ADMIN] FORCE PHASE END
                                 </button>
-                            </div>
-                        )}
+                            )}
+                        </div>
+                        
+                        {/* Ready Count */}
+                        <div className="text-center text-xs font-bold opacity-50 mt-2">
+                             PLAYERS READY: {room.players.filter((p: any) => p.isAlive && p.isReady).length} / {room.players.filter((p: any) => p.isAlive).length}
+                        </div>
                     </motion.div>
 
                     {/* Role Sidebar (Desktop) / Drawer (Mobile) */}

@@ -35,6 +35,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
             await pusherServer.trigger(`presence-${roomId}`, 'player-joined', newPlayer);
 
             return NextResponse.json({ success: true, playerId, roomId, room });
+            await pusherServer.trigger(`presence-${roomId}`, 'player-joined', newPlayer);
+
+            return NextResponse.json({ success: true, playerId, roomId, room });
+        }
+
+        if (action === 'update-settings') {
+            const { playerId, settings } = body;
+            const player = room.players.find((p: any) => p.playerId === playerId);
+            if (!player || player.playerId !== room.players[0].playerId || room.status !== 'LOBBY') {
+                return NextResponse.json({ success: false, error: 'Unauthorized or invalid state' }, { status: 403 });
+            }
+            room.settings = { ...room.settings, ...settings };
+            await room.save();
+            await pusherServer.trigger(`presence-${roomId}`, 'settings-update', room.settings);
+            return NextResponse.json({ success: true, settings: room.settings });
+        }
+
+        if (action === 'kick-player') {
+            const { playerId, targetId } = body;
+            // Host check
+            if (room.players[0].playerId !== playerId || room.status !== 'LOBBY') {
+                return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+            }
+            room.players = room.players.filter((p: any) => p.playerId !== targetId);
+            await room.save();
+            await pusherServer.trigger(`presence-${roomId}`, 'player-kicked', { playerId: targetId });
+            return NextResponse.json({ success: true });
+        }
+
+        if (action === 'toggle-ready') {
+            const { playerId } = body;
+            const player = room.players.find((p: any) => p.playerId === playerId);
+            if (!player || !player.isAlive || room.status !== 'ACTIVE') return NextResponse.json({ success: false });
+
+            player.isReady = !player.isReady;
+            await room.save();
+
+            // Check if all alive players are ready
+            const alivePlayers = room.players.filter((p: any) => p.isAlive);
+            const allReady = alivePlayers.every((p: any) => p.isReady);
+
+            await pusherServer.trigger(`presence-${roomId}`, 'player-update', room.players); // Optimize payload?
+
+            if (allReady) {
+                // Trigger phase change immediately
+                // We can recursively call logic or just return a flag to frontend? 
+                // Better to call process-phase logic here or client triggers it?
+                // Secure way: server calls it.
+                // Refactoring process-phase logic to a shared function is best but for now redirecting flow:
+                return processPhase(room, roomId);
+            }
+
+            return NextResponse.json({ success: true });
         }
 
         if (action === 'start') {
@@ -145,13 +198,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
                         room.gameState.nightResults = { message: `${victim.name} was lynched.` };
                     }
 
+                    // Reset Ready Status
+                    room.players.forEach((p: any) => p.isReady = false);
+
                     await room.save();
                     await pusherServer.trigger(`presence-${roomId}`, 'phase-change', {
                         gameState: room.gameState,
-                        players: room.players // Or masked version
+                        players: room.players
                     });
                     return NextResponse.json({ success: true, processed: true });
                 }
+            }
+
+            // Early Vote Termination Check (If all alive players voted)
+            const totalVotes = Object.values(votes).reduce((a: any, b: any) => a + b, 0);
+            if (totalVotes === alivePlayers.length) {
+                // Everyone voted but no majority found (Split vote)
+                // End day with No Lynch
+                room.gameState.phase = 'NIGHT';
+                room.gameState.dayNumber += 1;
+                room.gameState.phaseEndTime = new Date(Date.now() + room.settings.nightTimer * 1000);
+                room.gameState.nightResults = { message: 'No majority reached. No one was lynched.' };
+                room.players.forEach((p: any) => { p.voteTarget = undefined; p.actionTarget = undefined; p.isReady = false; });
+                await room.save();
+                await pusherServer.trigger(`presence-${roomId}`, 'phase-change', {
+                    gameState: room.gameState,
+                    players: room.players
+                });
+                return NextResponse.json({ success: true, processed: true, message: 'Day ended early (All voted)' });
             }
 
             await pusherServer.trigger(`presence-${roomId}`, 'vote-update', { votes });
@@ -159,89 +233,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
         }
 
         if (action === 'process-phase') {
-            // Called when timer expires
-            const now = new Date();
-            // Allow a small buffer or strict check? 
-            // if (room.gameState.phaseEndTime && new Date(room.gameState.phaseEndTime) > now) {
-            //    return NextResponse.json({ success: false, error: 'Timer not expired' });
-            // }
-
-            if (room.gameState.phase === 'NIGHT') {
-                // Process Night Actions
-                // 1. Calculate Mafia Kill
-                const mafia = room.players.filter((p: any) => p.role === 'Mafia' && p.isAlive);
-                // Simple logic: Majority target or first target
-                const mafiaVotes: { [key: string]: number } = {};
-                mafia.forEach((p: any) => {
-                    if (p.actionTarget) mafiaVotes[p.actionTarget] = (mafiaVotes[p.actionTarget] || 0) + 1;
-                });
-                // Pick max
-                let killTargetId: string | null = null;
-                let maxVotes = 0;
-                for (const [target, count] of Object.entries(mafiaVotes)) {
-                    if (count > maxVotes) {
-                        maxVotes = count;
-                        killTargetId = target;
-                    }
-                }
-
-                // 2. Doctor Save
-                const doctors = room.players.filter((p: any) => p.role === 'Doctor' && p.isAlive);
-                const savedIds: string[] = [];
-                doctors.forEach((d: any) => {
-                    if (d.actionTarget) savedIds.push(d.actionTarget);
-                });
-
-                // 3. Resolve
-                let message = "No one died last night.";
-                if (killTargetId && !savedIds.includes(killTargetId)) {
-                    const victim = room.players.find((p: any) => p.playerId === killTargetId);
-                    if (victim) {
-                        victim.isAlive = false;
-                        message = `${victim.name} was killed last night.`;
-                    }
-                } else if (killTargetId && savedIds.includes(killTargetId)) {
-                    message = "Someone was attacked but saved!";
-                }
-
-                // Check Win Condition (Mafia >= Civilians)
-                const aliveMafia = room.players.filter((p: any) => p.isAlive && p.role === 'Mafia').length;
-                const aliveCivilians = room.players.filter((p: any) => p.isAlive && p.role !== 'Mafia').length;
-
-                if (aliveMafia >= aliveCivilians) {
-                    room.status = 'FINISHED';
-                    room.gameState.phase = 'GAME_OVER';
-                    room.gameState.nightResults = { message: 'Mafia Wins!' };
-                } else {
-                    room.gameState.phase = 'DAY';
-                    room.gameState.phaseEndTime = new Date(Date.now() + room.settings.dayTimer * 1000);
-                    room.gameState.nightResults = { message };
-                    // Clear targets
-                    room.players.forEach((p: any) => { p.actionTarget = undefined; p.voteTarget = undefined; });
-                }
-
-                await room.save();
-                await pusherServer.trigger(`presence-${roomId}`, 'phase-change', {
-                    gameState: room.gameState
-                });
-
-                return NextResponse.json({ success: true, message });
-            }
-
-            if (room.gameState.phase === 'DAY') {
-                // Timer ran out without majority lynch
-                room.gameState.phase = 'NIGHT';
-                room.gameState.dayNumber += 1;
-                room.gameState.phaseEndTime = new Date(Date.now() + room.settings.nightTimer * 1000);
-                room.gameState.nightResults = { message: 'No one was lynched today.' };
-                // Clear targets
-                room.players.forEach((p: any) => { p.voteTarget = undefined; p.actionTarget = undefined; });
-                await room.save();
-                await pusherServer.trigger(`presence-${roomId}`, 'phase-change', {
-                    gameState: room.gameState
-                });
-                return NextResponse.json({ success: true, message: 'Day ended without lynch' });
-            }
+            return processPhase(room, roomId);
         }
 
         return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
@@ -250,6 +242,102 @@ export async function POST(req: Request, { params }: { params: Promise<{ roomId:
         console.error('Error in game route:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
+}
+
+async function processPhase(room: any, roomId: string) {
+    const now = new Date();
+    // Optional: Check if timer has actually expired if this function is called by a client
+    // if (room.gameState.phaseEndTime && new Date(room.gameState.phaseEndTime) > now) {
+    //    return NextResponse.json({ success: false, error: 'Timer not expired' });
+    // }
+
+    if (room.gameState.phase === 'NIGHT') {
+        // Process Night Actions
+        // 1. Calculate Mafia Kill
+        const mafia = room.players.filter((p: any) => p.role === 'Mafia' && p.isAlive);
+        // Simple logic: Majority target or first target
+        const mafiaVotes: { [key: string]: number } = {};
+        mafia.forEach((p: any) => {
+            if (p.actionTarget) mafiaVotes[p.actionTarget] = (mafiaVotes[p.actionTarget] || 0) + 1;
+        });
+        // Pick max
+        let killTargetId: string | null = null;
+        let maxVotes = 0;
+        for (const [target, count] of Object.entries(mafiaVotes)) {
+            if ((count as number) > maxVotes) { // fix ts type
+                maxVotes = count as number;
+                killTargetId = target;
+            }
+        }
+
+        // 2. Doctor Save
+        const doctors = room.players.filter((p: any) => p.role === 'Doctor' && p.isAlive);
+        const savedIds: string[] = [];
+        doctors.forEach((d: any) => {
+            if (d.actionTarget) savedIds.push(d.actionTarget);
+        });
+
+        // 3. Detective logic (if any)
+        const detectives = room.players.filter((p: any) => p.role === 'Detective' && p.isAlive);
+        // Detective logic could go here (sending private event results), currently simplified.
+
+        // 4. Resolve
+        let message = "No one died last night.";
+        if (killTargetId && !savedIds.includes(killTargetId)) {
+            const victim = room.players.find((p: any) => p.playerId === killTargetId);
+            if (victim) {
+                victim.isAlive = false;
+                message = `${victim.name} was killed last night.`;
+            }
+        } else if (killTargetId && savedIds.includes(killTargetId)) {
+            message = "Someone was attacked but saved!";
+        }
+
+        // Check Win Condition (Mafia >= Civilians)
+        const aliveMafia = room.players.filter((p: any) => p.isAlive && p.role === 'Mafia').length;
+        const aliveCivilians = room.players.filter((p: any) => p.isAlive && p.role !== 'Mafia').length;
+
+        if (aliveMafia === 0) {
+            room.status = 'FINISHED';
+            room.gameState.phase = 'GAME_OVER';
+            room.gameState.nightResults = { message: 'Civilians Win!' };
+        } else if (aliveMafia >= aliveCivilians) {
+            room.status = 'FINISHED';
+            room.gameState.phase = 'GAME_OVER';
+            room.gameState.nightResults = { message: 'Mafia Wins!' };
+        } else {
+            room.gameState.phase = 'DAY';
+            room.gameState.phaseEndTime = new Date(Date.now() + room.settings.dayTimer * 1000);
+            room.gameState.nightResults = { message };
+            // Clear targets and ready status for next phase
+            room.players.forEach((p: any) => { p.actionTarget = undefined; p.voteTarget = undefined; p.isReady = false; });
+        }
+
+        await room.save();
+        await pusherServer.trigger(`presence-${roomId}`, 'phase-change', {
+            gameState: room.gameState,
+            players: room.players // Include players to show who died
+        });
+
+        return NextResponse.json({ success: true, message });
+    }
+
+    if (room.gameState.phase === 'DAY') {
+        // Timer ran out without majority lynch
+        room.gameState.phase = 'NIGHT';
+        room.gameState.dayNumber += 1;
+        room.gameState.phaseEndTime = new Date(Date.now() + room.settings.nightTimer * 1000);
+        room.gameState.nightResults = { message: 'No one was lynched today.' };
+        // Clear targets and ready status for next phase
+        room.players.forEach((p: any) => { p.voteTarget = undefined; p.actionTarget = undefined; p.isReady = false; });
+        await room.save();
+        await pusherServer.trigger(`presence-${roomId}`, 'phase-change', {
+            gameState: room.gameState
+        });
+        return NextResponse.json({ success: true, message: 'Day ended without lynch' });
+    }
+
+    return NextResponse.json({ success: true });
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ roomId: string }> }) {

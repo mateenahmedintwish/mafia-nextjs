@@ -18,12 +18,13 @@ export default function Home() {
   const [name, setName] = useState('');
   const [avatar, setAvatar] = useState(AVATARS[0]);
   const [roomCode, setRoomCode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState('');
 
   const createGame = async () => {
     if (!name) return setError('Please enter your name');
-    setLoading(true);
+    setIsCreating(true);
     try {
       const res = await fetch('/api/game/create', {
         method: 'POST',
@@ -36,17 +37,17 @@ export default function Home() {
         router.push(`/game/${data.roomId}`);
       } else {
         setError(data.error || 'Failed to create game');
+        setIsCreating(false);
       }
     } catch (err) {
       setError('An error occurred');
-    } finally {
-      setLoading(false);
+      setIsCreating(false);
     }
   };
 
   const joinGame = async () => {
     if (!name || !roomCode) return setError('Please enter name and room code');
-    setLoading(true);
+    setIsJoining(true);
     try {
       const res = await fetch(`/api/game/${roomCode}`, {
         method: 'POST',
@@ -59,17 +60,19 @@ export default function Home() {
         router.push(`/game/${data.roomId}`);
       } else {
         setError(data.error || 'Failed to join game');
+        setIsJoining(false);
       }
     } catch (err) {
       setError('An error occurred');
-    } finally {
-      setLoading(false);
+      setIsJoining(false);
     }
   };
 
+  const isLoading = isCreating || isJoining;
+
   return (
     <main className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Animated Elements */}
+      {/*... animations ...*/}
       <motion.div 
         animate={{ 
             y: [0, -20, 0],
@@ -120,6 +123,7 @@ export default function Home() {
                     placeholder="Enter Agent Name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    disabled={isLoading}
                 />
             </div>
 
@@ -133,9 +137,11 @@ export default function Home() {
                         <button 
                             key={av}
                             onClick={() => setAvatar(av)}
+                            disabled={isLoading}
                             className={`
                                 text-2xl p-2 rounded-lg transition-all hover:scale-110 hover:bg-white/10
                                 ${avatar === av ? 'bg-white/20 scale-110 ring-2 ring-blue-500' : 'opacity-50 hover:opacity-100'}
+                                ${isLoading ? 'opacity-30 cursor-not-allowed' : ''}
                             `}
                         >
                             {av}
@@ -161,11 +167,20 @@ export default function Home() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={createGame}
-                    disabled={loading}
-                    className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 flex items-center justify-center gap-3 transition-all"
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 flex items-center justify-center gap-3 transition-all disabled:opacity-70 disabled:grayscale"
                 >
-                   {loading ? <Users className="animate-pulse" /> : <Play size={20} fill="currentColor" />}
-                   CREATE NEW GAME
+                   {isCreating ? (
+                       <>
+                           <Users className="animate-spin" /> 
+                           CREATING...
+                       </>
+                   ) : (
+                       <>
+                           <Play size={20} fill="currentColor" />
+                           CREATE NEW GAME
+                       </>
+                   )}
                 </motion.button>
 
                 <div className="relative flex py-2 items-center">
@@ -184,16 +199,17 @@ export default function Home() {
                             placeholder="CODE"
                             value={roomCode}
                             onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                            disabled={isLoading}
                         />
                     </div>
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={joinGame}
-                        disabled={loading}
-                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl shadow-lg shadow-blue-900/20"
+                        disabled={isLoading}
+                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl shadow-lg shadow-blue-900/20 disabled:opacity-70 disabled:grayscale min-w-[3.5rem] flex items-center justify-center"
                     >
-                        <ArrowRight size={24} />
+                        {isJoining ? <Users className="animate-spin" size={24}/> : <ArrowRight size={24} />}
                     </motion.button>
                 </div>
             </div>

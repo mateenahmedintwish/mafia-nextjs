@@ -9,6 +9,7 @@ export interface IPlayer {
     isAlive: boolean;
     voteTarget?: string;
     actionTarget?: string;
+    isReady?: boolean;
 }
 
 export interface IRoom extends Document {
@@ -41,7 +42,8 @@ const PlayerSchema = new Schema<IPlayer>({
     role: { type: String, enum: ['Mafia', 'Civilian', 'Detective', 'Doctor'] },
     isAlive: { type: Boolean, default: true },
     voteTarget: { type: String },
-    actionTarget: { type: String }
+    actionTarget: { type: String },
+    isReady: { type: Boolean, default: false }
 });
 
 const RoomSchema = new Schema<IRoom>({
